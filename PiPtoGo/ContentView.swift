@@ -96,7 +96,7 @@ struct ContentView: View {
                 pipButton(
                     "开始画中画",
                     icon: "pip.enter",
-                    disabled: !hasContent || !pipPossible || isPiPActive
+                    disabled: !hasContent || isPiPActive
                 ) { startPIP() }
                 pipButton(
                     "停止",

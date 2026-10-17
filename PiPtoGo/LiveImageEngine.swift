@@ -113,6 +113,9 @@ final class LiveImageEngine: NSObject {
         audioTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.enqueueSilence()
         }
+
+        // 尽早创建 PiP 控制器，让 isPictureInPicturePossible 状态立即可用（否则开始按钮一直不可点）
+        ensureController()
     }
 
     // MARK: - 画中画
@@ -120,31 +123,34 @@ final class LiveImageEngine: NSObject {
     func startPIP() {
         guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
 
-        if pipController == nil {
-            let contentSource = AVPictureInPictureController.ContentSource(
-                sampleBufferDisplayLayer: displayLayer,
-                playbackDelegate: self
-            )
-            let controller = AVPictureInPictureController(contentSource: contentSource)
-            controller.delegate = self
-            pipController = controller
-
-            possibilityObservation = controller.observe(
-                \.isPictureInPicturePossible,
-                options: [.initial, .new]
-            ) { [weak self] controller, _ in
-                self?.onPossibleChanged?(controller.isPictureInPicturePossible)
-            }
-            activeObservation = controller.observe(
-                \.isPictureInPictureActive,
-                options: [.new]
-            ) { [weak self] controller, _ in
-                self?.onPiPActive?(controller.isPictureInPictureActive)
-            }
-        }
+        ensureController()
 
         guard let pipController, pipController.isPictureInPicturePossible else { return }
         pipController.startPictureInPicture()
+    }
+
+    private func ensureController() {
+        guard pipController == nil else { return }
+        let contentSource = AVPictureInPictureController.ContentSource(
+            sampleBufferDisplayLayer: displayLayer,
+            playbackDelegate: self
+        )
+        let controller = AVPictureInPictureController(contentSource: contentSource)
+        controller.delegate = self
+        pipController = controller
+
+        possibilityObservation = controller.observe(
+            \.isPictureInPicturePossible,
+            options: [.initial, .new]
+        ) { [weak self] controller, _ in
+            self?.onPossibleChanged?(controller.isPictureInPicturePossible)
+        }
+        activeObservation = controller.observe(
+            \.isPictureInPictureActive,
+            options: [.new]
+        ) { [weak self] controller, _ in
+            self?.onPiPActive?(controller.isPictureInPictureActive)
+        }
     }
 
     func stopPIP() {
