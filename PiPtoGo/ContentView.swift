@@ -48,6 +48,9 @@ struct ContentView: View {
             },
             onPossible: { possible in
                 pipPossible = possible
+            },
+            onPIPError: { message in
+                statusText = message
             }
         )
         .frame(height: 220)
@@ -80,7 +83,10 @@ struct ContentView: View {
                     "开始画中画",
                     icon: "pip.enter",
                     disabled: player == nil || isLoading || isPiPActive
-                ) { pipView.startPIP() }
+                ) {
+                    statusText = "正在启动画中画…"
+                    pipView.startPIP()
+                }
                 pipButton(
                     "停止",
                     icon: "pip.exit",
@@ -195,10 +201,12 @@ struct PiPVideoContainer: UIViewRepresentable {
     let view: PiPVideoView
     let onPiPActive: (Bool) -> Void
     let onPossible: (Bool) -> Void
+    let onPIPError: (String) -> Void
 
     func makeUIView(context: Context) -> PiPVideoView {
         view.onPiPActive = { active in onPiPActive(active) }
         view.onPossibleChanged = { possible in onPossible(possible) }
+        view.onPIPError = { message in onPIPError(message) }
         view.attach(player: player)
         return view
     }
@@ -206,6 +214,7 @@ struct PiPVideoContainer: UIViewRepresentable {
     func updateUIView(_ uiView: PiPVideoView, context: Context) {
         uiView.onPiPActive = { active in onPiPActive(active) }
         uiView.onPossibleChanged = { possible in onPossible(possible) }
+        uiView.onPIPError = { message in onPIPError(message) }
         uiView.attach(player: player)
     }
 }
