@@ -4,12 +4,10 @@ import AVFoundation
 struct ContentView: View {
 
     @State private var pipView = PiPVideoView(frame: .zero)
-    @State private var liveView = LiveImageView(frame: .zero)
 
     @State private var player: AVPlayer?
     @State private var loopPlayer: AVQueuePlayer?
     @State private var looper: AVPlayerLooper?
-    @State private var liveEngine: LiveImageEngine?
 
     @State private var showImagePicker = false
     @State private var showVideoPicker = false
@@ -17,6 +15,7 @@ struct ContentView: View {
     @State private var piPSupported = PiPVideoView.isPiPSupported
     @State private var isPiPActive = false
     @State private var pipPossible = false
+    @State private var isLoading = false
     @State private var statusText = "请选择一张图片或一个视频"
 
     var body: some View {
@@ -40,38 +39,26 @@ struct ContentView: View {
     }
 
     private var previewArea: some View {
-        ZStack {
-            if let engine = liveEngine {
-                LiveImageContainer(
-                    engine: engine,
-                    view: liveView,
-                    onPiPActive: { active in
-                        isPiPActive = active
-                        statusText = active ? "正在画中画播放中…" : (hasContent ? "画中画已停止" : "请选择媒体")
-                    },
-                    onPossible: { possible in
-                        pipPossible = possible
-                    }
-                )
-            } else {
-                PiPVideoContainer(
-                    player: $player,
-                    view: pipView,
-                    onPiPActive: { active in
-                        isPiPActive = active
-                        statusText = active ? "正在画中画播放中…" : (hasContent ? "画中画已停止" : "请选择媒体")
-                    },
-                    onPossible: { possible in
-                        pipPossible = possible
-                    }
-                )
+        PiPVideoContainer(
+            player: $player,
+            view: pipView,
+            onPiPActive: { active in
+                isPiPActive = active
+                statusText = active ? "正在画中画播放中…" : (player != nil ? "画中画已停止" : "请选择媒体")
+            },
+            onPossible: { possible in
+                pipPossible = possible
             }
-        }
+        )
         .frame(height: 220)
         .background(Color.black)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay {
-            if !hasContent {
+            if isLoading {
+                ProgressView("正在生成循环视频…")
+                    .tint(.white)
+                    .foregroundStyle(.white)
+            } else if player == nil {
                 VStack(spacing: 8) {
                     Image(systemName: "pip")
                         .font(.largeTitle)
@@ -80,10 +67,6 @@ struct ContentView: View {
                 }
             }
         }
-    }
-
-    private var hasContent: Bool {
-        player != nil || liveEngine != nil
     }
 
     private var controls: some View {
@@ -96,13 +79,13 @@ struct ContentView: View {
                 pipButton(
                     "开始画中画",
                     icon: "pip.enter",
-                    disabled: !hasContent || isPiPActive
-                ) { startPIP() }
+                    disabled: player == nil || isLoading || isPiPActive
+                ) { pipView.startPIP() }
                 pipButton(
                     "停止",
                     icon: "pip.exit",
-                    disabled: !hasContent
-                ) { stopPIP() }
+                    disabled: player == nil
+                ) { pipView.stopPIP() }
             }
         }
     }
@@ -135,19 +118,6 @@ struct ContentView: View {
         .disabled(disabled)
     }
 
-    private func startPIP() {
-        if let engine = liveEngine {
-            engine.startPIP()
-        } else {
-            pipView.startPIP()
-        }
-    }
-
-    private func stopPIP() {
-        liveEngine?.stopPIP()
-        pipView.stopPIP()
-    }
-
     // MARK: - 处理选择的媒体
 
     private func handleImage(_ url: URL?) {
@@ -160,22 +130,30 @@ struct ContentView: View {
             return
         }
 
-        // 切走旧的视频/画中画
+        // 切走旧内容
         player?.pause()
         player = nil
         loopPlayer = nil
         looper = nil
-        liveEngine?.stopPIP()
         pipView.stopPIP()
 
-        // 直播式：直接把图片帧喂给渲染器，无需重编码
-        let engine = LiveImageEngine()
-        do {
-            try engine.attach(imageData: data)
-            liveEngine = engine
-            statusText = "图片已就绪（直播式，无需编码），可开始画中画"
-        } catch {
-            statusText = "图片处理失败：\(error.localizedDescription)"
+        // 快速编码成短循环视频（最长边 960、2 秒，硬件编码 <0.5s）
+        isLoading = true
+        statusText = "正在生成循环视频…"
+        Task {
+            do {
+                let videoURL = try await VideoEncoder.makeLoopedVideo(from: data, seconds: 2.0)
+                await MainActor.run {
+                    setupLoopingPlayer(videoURL)
+                    isLoading = false
+                    statusText = "图片已就绪，可开始画中画"
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    statusText = "图片处理失败：\(error.localizedDescription)"
+                }
+            }
         }
     }
 
@@ -185,9 +163,11 @@ struct ContentView: View {
             return
         }
 
-        // 切走旧的图片直播
-        liveEngine?.stopPIP()
-        liveEngine = nil
+        player?.pause()
+        player = nil
+        loopPlayer = nil
+        looper = nil
+        pipView.stopPIP()
 
         let newPlayer = AVPlayer(playerItem: AVPlayerItem(url: url))
         player = newPlayer
@@ -195,6 +175,16 @@ struct ContentView: View {
         looper = nil
         newPlayer.play()
         statusText = "视频已就绪，可开始画中画"
+    }
+
+    private func setupLoopingPlayer(_ url: URL) {
+        let item = AVPlayerItem(url: url)
+        let queue = AVQueuePlayer()
+        let loop = AVPlayerLooper(player: queue, templateItem: item)
+        player = queue
+        loopPlayer = queue
+        looper = loop
+        queue.play()
     }
 }
 
