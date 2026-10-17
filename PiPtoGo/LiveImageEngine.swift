@@ -16,7 +16,7 @@ import AudioToolbox
 ///    从而画中画切到后台后依然持续。
 ///
 /// 结果：选完图片 <1 秒即可开始画中画。
-final class LiveImageEngine {
+final class LiveImageEngine: NSObject {
 
     enum EngineError: LocalizedError {
         case invalidImage
@@ -123,7 +123,7 @@ final class LiveImageEngine {
         if pipController == nil {
             let contentSource = AVPictureInPictureController.ContentSource(
                 sampleBufferDisplayLayer: displayLayer,
-                playbackControlsDelegate: nil
+                playbackDelegate: self
             )
             let controller = AVPictureInPictureController(contentSource: contentSource)
             controller.delegate = self
@@ -154,7 +154,7 @@ final class LiveImageEngine {
     // MARK: - 供数循环
 
     private func supplyVideoFrames() {
-        while displayLayer.respondsToMediaDataRequests {
+        while displayLayer.isReadyForMoreMediaData {
             guard let buffer = makeFrame(at: framePTS) else { break }
             displayLayer.enqueue(buffer)
             framePTS = framePTS + frameInterval
@@ -336,6 +336,59 @@ extension LiveImageEngine: AVPictureInPictureControllerDelegate {
         restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
     ) {
         completionHandler(true)
+    }
+}
+
+// MARK: - Sample Buffer 播放控制（iOS 15 必需）
+
+extension LiveImageEngine: AVPictureInPictureSampleBufferPlaybackDelegate {
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        setPlaying playing: Bool
+    ) {}
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        setPlaybackRate playbackRate: Float
+    ) {}
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        setCurrentTime time: CMTime,
+        fastForwardedTo tolerance: CMTime
+    ) {}
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        timeRangeForPlayback timeRange: UnsafeMutablePointer<CMTimeRange>
+    ) -> CMTimeRange {
+        CMTimeRange(start: .zero, duration: .positiveInfinity)
+    }
+
+    func pictureInPictureControllerIsPlaybackPaused(
+        _ pictureInPictureController: AVPictureInPictureController
+    ) -> Bool {
+        false
+    }
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        didTransitionToRenderSize newRenderSize: CMVideoDimensions
+    ) {}
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        skipByInterval skipInterval: CMTime,
+        completion completionHandler: @escaping () -> Void
+    ) {
+        completionHandler()
+    }
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        getSourceTimeWithCompletion completionHandler: @escaping (CMTime?) -> Void
+    ) {
+        completionHandler(framePTS)
     }
 }
 
