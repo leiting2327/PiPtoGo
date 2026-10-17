@@ -1,14 +1,16 @@
 import UIKit
+import SwiftUI
 import AVFoundation
+import AVKit
 import CoreMedia
 import CoreVideo
 import AudioToolbox
 
-/// 图片「直播化」画中画引擎。
+/// 图片「直播化」画中画引擎（iOS 15 兼容）。
 ///
 /// 不再把图片重编码成 MP4（那是主要耗时来源），而是：
 /// 1. 把图片绘制进 CVPixelBuffer，按帧率包装成 CMSampleBuffer；
-/// 2. 通过 `AVSampleBufferVideoRenderer` 持续供数给 `AVSampleBufferDisplayLayer`，
+/// 2. 直接 enqueue 给 `AVSampleBufferDisplayLayer`（iOS 15 的 sample-buffer 画中画管道），
 ///    让系统把它当作一路实时的视频/直播内容；
 /// 3. 同时用 `AVSampleBufferAudioRenderer` 持续播放静音，让系统认为有音频在播，
 ///    从而画中画切到后台后依然持续。
@@ -28,13 +30,12 @@ final class LiveImageEngine {
         }
     }
 
-    /// 上屏用的显示层（加入视图层级）
+    /// 上屏用的显示层（加入视图层级，同时作为画中画内容源）
     let displayLayer = AVSampleBufferDisplayLayer()
 
-    private let videoRenderer = AVSampleBufferVideoRenderer()
     private let audioRenderer = AVSampleBufferAudioRenderer()
     private let videoQueue = DispatchQueue(label: "com.piptogo.live.video")
-    private let audioQueue = DispatchQueue(label: "com.piptogo.live.audio")
+    private var audioTimer: Timer?
 
     private var pipController: AVPictureInPictureController?
     private var possibilityObservation: NSKeyValueObservation?
@@ -57,9 +58,7 @@ final class LiveImageEngine {
     var isActive: Bool { pipController?.isPictureInPictureActive ?? false }
 
     init() {
-        displayLayer.videoRenderer = videoRenderer
         displayLayer.videoGravity = .resizeAspect
-        audioRenderer.audioSession = AVAudioSession.sharedInstance()
     }
 
     deinit {
@@ -96,18 +95,23 @@ final class LiveImageEngine {
         audioPTS = .zero
 
         // 渲染第一帧
-        videoRenderer.flush()
+        displayLayer.flush()
         if let first = makeFrame(at: .zero) {
-            videoRenderer.enqueue(first)
+            displayLayer.enqueue(first)
         }
         framePTS = frameInterval
 
-        // 持续供数（帧 + 静音）
-        videoRenderer.requestMediaDataWhenReady(on: videoQueue) { [weak self] in
+        // 视频：持续供数（requestMediaDataWhenReady 模式）
+        displayLayer.requestMediaDataWhenReady(on: videoQueue) { [weak self] in
             self?.supplyVideoFrames()
         }
-        audioRenderer.requestMediaDataWhenReady(on: audioQueue) { [weak self] in
-            self?.supplySilence()
+
+        // 音频：先预填 3 秒静音，再每秒补 1 秒
+        for _ in 0..<3 {
+            enqueueSilence()
+        }
+        audioTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.enqueueSilence()
         }
     }
 
@@ -150,25 +154,25 @@ final class LiveImageEngine {
     // MARK: - 供数循环
 
     private func supplyVideoFrames() {
-        while videoRenderer.respondsToMediaDataRequests {
+        while displayLayer.respondsToMediaDataRequests {
             guard let buffer = makeFrame(at: framePTS) else { break }
-            videoRenderer.enqueue(buffer)
+            displayLayer.enqueue(buffer)
             framePTS = framePTS + frameInterval
         }
     }
 
-    private func supplySilence() {
-        while audioRenderer.respondsToMediaDataRequests {
-            guard let buffer = makeSilence(at: audioPTS) else { break }
-            audioRenderer.enqueue(buffer)
-            audioPTS = audioPTS + silenceInterval
-        }
+    private func enqueueSilence() {
+        guard audioRenderer.status != .failed else { return }
+        guard let buffer = makeSilence(at: audioPTS) else { return }
+        audioRenderer.enqueue(buffer)
+        audioPTS = audioPTS + silenceInterval
     }
 
     private func teardown() {
-        videoRenderer.stopRequestingMediaData()
-        audioRenderer.stopRequestingMediaData()
-        videoRenderer.flush()
+        displayLayer.stopRequestingMediaData()
+        displayLayer.flush()
+        audioTimer?.invalidate()
+        audioTimer = nil
         audioRenderer.flush()
 
         pipController?.stopPictureInPicture()
