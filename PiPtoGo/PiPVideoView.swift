@@ -9,7 +9,7 @@ final class PiPVideoView: UIView {
     let playerLayer = AVPlayerLayer()
 
     /// 供外部状态回调，SwiftUI 通过它更新 UI
-    var onPiPStateChanged: ((Bool) -> Void)?
+    var onPiPActive: ((Bool) -> Void)?
     var onPossibleChanged: ((Bool) -> Void)?
 
     private var pipController: AVPictureInPictureController?
@@ -50,15 +50,16 @@ final class PiPVideoView: UIView {
         activeObservation = nil
 
         guard let newPlayer else { return }
-        let controller = AVPictureInPictureController(playerLayer: playerLayer)
-        controller.delegate = self
+
+        guard let controller = AVPictureInPictureController(playerLayer: playerLayer) else { return }
         pipController = controller
+        controller.delegate = self
 
         possibilityObservation = controller.observe(\.isPictureInPicturePossible, options: [.initial, .new]) { [weak self] controller, _ in
             self?.onPossibleChanged?(controller.isPictureInPicturePossible)
         }
         activeObservation = controller.observe(\.isPictureInPictureActive, options: [.new]) { [weak self] controller, _ in
-            self?.onPiPStateChanged?(controller.isPictureInPictureActive)
+            self?.onPiPActive?(controller.isPictureInPictureActive)
         }
     }
 

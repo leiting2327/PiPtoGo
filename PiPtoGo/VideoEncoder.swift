@@ -166,6 +166,9 @@ enum VideoEncoder {
             asbd: &asbd,
             layoutSize: 0,
             layout: nil,
+            magicCookieSize: 0,
+            magicCookie: nil,
+            extensions: nil,
             formatDescriptionOut: &formatDesc
         ) == noErr, let formatDesc else { return nil }
 
