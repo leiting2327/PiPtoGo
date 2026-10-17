@@ -57,7 +57,7 @@ final class LiveImageEngine: NSObject {
 
     var isActive: Bool { pipController?.isPictureInPictureActive ?? false }
 
-    init() {
+    override init() {
         displayLayer.videoGravity = .resizeAspect
     }
 
@@ -358,9 +358,8 @@ extension LiveImageEngine: AVPictureInPictureSampleBufferPlaybackDelegate {
         fastForwardedTo tolerance: CMTime
     ) {}
 
-    func pictureInPictureController(
-        _ pictureInPictureController: AVPictureInPictureController,
-        timeRangeForPlayback timeRange: UnsafeMutablePointer<CMTimeRange>
+    func pictureInPictureControllerTimeRangeForPlayback(
+        _ pictureInPictureController: AVPictureInPictureController
     ) -> CMTimeRange {
         CMTimeRange(start: .zero, duration: .positiveInfinity)
     }
@@ -386,7 +385,7 @@ extension LiveImageEngine: AVPictureInPictureSampleBufferPlaybackDelegate {
 
     func pictureInPictureController(
         _ pictureInPictureController: AVPictureInPictureController,
-        getSourceTimeWithCompletion completionHandler: @escaping (CMTime?) -> Void
+        getSourceTimeWithCompletion completionHandler: @escaping (CMTime) -> Void
     ) {
         completionHandler(framePTS)
     }
