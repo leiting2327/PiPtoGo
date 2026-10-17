@@ -1,0 +1,48 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      export_method:
+        description: '签名导出方式（development / app-store-connect / ad-hoc），留空时按描述文件自动判断'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  build:
+    name: Build PiPtoGo IPA
+    runs-on: macos-15
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: |
+          brew install xcodegen || brew upgrade xcodegen
+
+      - name: Build IPA (signs automatically when signing secrets are present)
+        run: chmod +x scripts/build_ipa.sh && ./scripts/build_ipa.sh
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+          EXPORT_METHOD: ${{ inputs.export_method }}
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa
+          path: build/*.ipa
+          if-no-files-found: error
+
+      - name: Create GitHub Release (tagged manually)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/*.ipa
+          generate_release_notes: true

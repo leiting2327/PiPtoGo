@@ -1,0 +1,39 @@
+name: PiPtoGo
+options:
+  minimumXcodeGenVersion: "2.38.0"
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "15.0"
+configs:
+  Debug: debug
+  Release: release
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+
+targets:
+  PiPtoGo:
+    type: application
+    platform: iOS
+    sources:
+      - path: PiPtoGo
+        excludes:
+          - Info.plist
+    settings:
+      base:
+        PRODUCT_NAME: PiPtoGo
+        PRODUCT_BUNDLE_IDENTIFIER: com.piptogo.app
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: PiPtoGo/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_BITCODE: NO
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        SUPPORTS_MACCATALYST: NO
+        CODE_SIGN_STYLE: Manual
