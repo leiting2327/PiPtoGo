@@ -6,7 +6,7 @@ import AudioToolbox
 
 /// 把一张图片快速编码成「带静音音轨」的循环视频（H.264 + AAC）。
 ///
-/// - 分辨率最长边压到 960、时长 2 秒，硬件编码极快（通常 <0.5 秒）
+/// - 分辨率最长边压到 768、时长 2 秒、20fps，硬件编码极快（通常 <0.5 秒）
 /// - 带静音音轨：AVPlayer 在后台仍被视为"正在播放音频"，画中画切后台不中断
 /// - 输出到临时目录，由调用方用 AVPlayer + AVPlayerLooper 无限循环播放
 enum VideoEncoder {
@@ -32,8 +32,8 @@ enum VideoEncoder {
             throw EncoderError.invalidImage
         }
 
-        // 缩放到最长边 960，保证编码速度与体积
-        let fitted = fittedSize(for: cg, maxDimension: 960)
+        // 缩放到最长边 768、20fps：静止画面无感，但解码负载更低（省电、省内存）
+        let fitted = fittedSize(for: cg, maxDimension: 768)
         guard let scaled = draw(cg, to: fitted) else { throw EncoderError.invalidImage }
 
         let url = FileManager.default.temporaryDirectory
@@ -75,7 +75,7 @@ enum VideoEncoder {
         writer.startSession(atSourceTime: .zero)
 
         // 逐帧写入
-        let fps = 30
+        let fps = 20
         let totalFrames = max(1, Int(seconds * Double(fps)))
         for index in 0..<totalFrames {
             while !videoInput.isReadyForMoreMediaData {

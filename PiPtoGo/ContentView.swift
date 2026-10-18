@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var pipPossible = false
     @State private var isLoading = false
     @State private var statusText = "请选择一张图片或一个视频"
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationView {
@@ -30,11 +31,30 @@ struct ContentView: View {
             .navigationTitle("PiPtoGo")
         }
         .navigationViewStyle(.stack)
+        .onChange(of: scenePhase) { phase in
+            handleScenePhase(phase)
+        }
         .sheet(isPresented: $showImagePicker) {
             MediaPicker(kind: .image) { url in handleImage(url) }
         }
         .sheet(isPresented: $showVideoPicker) {
             MediaPicker(kind: .video) { url in handleVideo(url) }
+        }
+    }
+
+    /// 后台占用治理：未进入画中画时，切到后台立即暂停播放，回到前台恢复。
+    private func handleScenePhase(_ phase: ScenePhase) {
+        switch phase {
+        case .background:
+            if !pipView.isActive {
+                player?.pause()
+            }
+        case .active:
+            if !isPiPActive, let player, player.rate == 0 {
+                player.play()
+            }
+        default:
+            break
         }
     }
 
